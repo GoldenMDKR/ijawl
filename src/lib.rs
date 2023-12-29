@@ -32,26 +32,45 @@ impl Op {
 #[derive(Debug, PartialEq)]
 pub enum Value {
     Number(Number),
-    Expression(Box<Expr>),
+    ExpressionBinary(Box<ExprBinary>),
+    ExpressionUnary(Box<ExprUnary>)
 }
 
 impl Value {
     pub fn as_num(val: Self) -> Number {
         match val {
             Value::Number(num) => num,
-            Value::Expression(expr) => Expr::evaluate(*expr),
+            Value::ExpressionBinary(expr) => ExprBinary::evaluate(*expr),
+            Value::ExpressionUnary(expr)=> ExprUnary::evaluate(*expr)
         }
     }
 }
 
+
 #[derive(Debug, PartialEq)]
-pub struct Expr {
+pub struct ExprUnary {
+    pub val : Value,
+    pub op: Op
+}
+
+impl ExprUnary {
+    pub fn evaluate(expr: Self) -> Number {
+        match expr.op {
+            Op::Sub => Number(-Value::as_num(expr.val).0),
+            _ => panic!("not a valid unary")
+        }
+    }
+}
+
+
+#[derive(Debug, PartialEq)]
+pub struct ExprBinary {
     pub lhs: Value,
     pub rhs: Value,
     pub op: Op,
 }
 
-impl Expr {
+impl ExprBinary {
     pub fn new(s: &str) -> Self {
         let (_, s) = utils::extract_whitespace(s);
         let (l, s) = utils::extract_digit(s);
@@ -157,8 +176,8 @@ mod tests {
     #[test]
     fn parse_one_plus_two() {
         assert_eq!(
-            Expr::new("1 + 2"),
-            Expr {
+            ExprBinary::new("1 + 2"),
+            ExprBinary {
                 lhs: Value::Number(Number(1)),
                 rhs: Value::Number(Number(2)),
                 op: Op::Add,
@@ -167,42 +186,51 @@ mod tests {
     }
 
     #[test]
-    fn evaluate_simple_add() {
-        let exp = Expr::new("1+2");
-        assert_eq!(Number(3), Expr::evaluate(exp));
+    fn evaluate_binary_simple_add() {
+        let exp = ExprBinary::new("1+2");
+        assert_eq!(Number(3), ExprBinary::evaluate(exp));
     }
 
     #[test]
-    fn evaluate_simple_sub() {
-        let exp = Expr::new("3-1");
-        assert_eq!(Number(2), Expr::evaluate(exp));
+    fn evaluate_binary_simple_sub() {
+        let exp = ExprBinary::new("3-1");
+        assert_eq!(Number(2), ExprBinary::evaluate(exp));
     }
 
     #[test]
-    fn evaluate_simple_mul() {
-        let exp = Expr::new("3*2");
-        assert_eq!(Number(6), Expr::evaluate(exp));
+    fn evaluate_binary_simple_mul() {
+        let exp = ExprBinary::new("3*2");
+        assert_eq!(Number(6), ExprBinary::evaluate(exp));
     }
 
     #[test]
-    fn evaluate_simple_div() {
-        let exp = Expr::new("12/2");
-        assert_eq!(Number(6), Expr::evaluate(exp));
+    fn evaluate_binary_simple_div() {
+        let exp = ExprBinary::new("12/2");
+        assert_eq!(Number(6), ExprBinary::evaluate(exp));
     }
 
     #[test]
-    fn evaluate_complex() {
+    fn evaluate_binary_complex() {
         // exp = 12 * (3 + 5)
-        let exp = Expr {
+        let exp = ExprBinary {
             lhs: Value::Number(Number(12)),
-            rhs: Value::Expression(Box::new(Expr {
+            rhs: Value::ExpressionBinary(Box::new(ExprBinary {
                 lhs: Value::Number(Number(3)),
                 rhs: Value::Number(Number(5)),
                 op: Op::Add,
             })),
             op: Op::Mul,
         };
-        assert_eq!(Number(96), Expr::evaluate(exp));
+        assert_eq!(Number(96), ExprBinary::evaluate(exp));
+    }
+
+    #[test]
+    fn evaluate_unary(){
+        let expr = ExprUnary {
+            val : Value::Number(Number(3)),
+            op: Op::Sub
+        };
+        assert_eq!(Number(-3), ExprUnary::evaluate(expr))
     }
 
     #[test]
@@ -233,8 +261,12 @@ mod tests {
             priority: 1,
         });
         tokens_prio.push(Token {
-            token_info: TokenInfo::Value(Value::Number(Number(3))),
+            token_info: TokenInfo::Op(Op::Sub),
             priority: 2,
+        });
+        tokens_prio.push(Token {
+            token_info: TokenInfo::Value(Value::Number(Number(3))),
+            priority: 3,
         });
 
         let mut tokens = vec![];
@@ -260,6 +292,10 @@ mod tests {
         });
         tokens.push(Token {
             token_info: TokenInfo::Op(Op::Add),
+            priority: 0,
+        });
+        tokens.push(Token {
+            token_info: TokenInfo::Op(Op::Sub),
             priority: 0,
         });
         tokens.push(Token {

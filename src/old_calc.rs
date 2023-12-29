@@ -1,6 +1,8 @@
+use std::borrow::Borrow;
+
 mod utils;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Number(pub i32);
 
 impl Number {
@@ -9,7 +11,7 @@ impl Number {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Op {
     Add,
     Sub,
@@ -30,7 +32,7 @@ impl Op {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Value {
     Number(Number),
     ExpressionBinary(Box<ExprBinary>),
@@ -48,7 +50,7 @@ impl Value {
 }
 
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct ExprUnary {
     pub val : Value,
     pub op: Op
@@ -64,7 +66,7 @@ impl ExprUnary {
 }
 
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct ExprBinary {
     pub lhs: Value,
     pub rhs: Value,
@@ -102,13 +104,13 @@ impl ExprBinary {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum TokenInfo {
     Value(Value),
     Op(Op),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Token {
     pub token_info: TokenInfo,
     pub priority: u16,
@@ -124,11 +126,8 @@ pub fn calculate_priority(token_list: &mut Vec<Token>) {
             TokenInfo::Op(op) => match op {
                 Op::Neg => token_list[idx + 1].priority = token_list[idx].priority + 1,
                 Op::Mul | Op::Div => {
-                    token_list[idx - 1].priority += 1;
                     token_list[idx + 1].priority += 1;
-                }
-                Op::Add | Op::Sub => {
-                    for i in 1..idx + 1 {
+                    for i in 1..idx+1{
                         match &token_list[idx - i].token_info {
                             TokenInfo::Value(_val) => token_list[idx - i].priority += 1,
                             TokenInfo::Op(op) => match op {
@@ -137,10 +136,24 @@ pub fn calculate_priority(token_list: &mut Vec<Token>) {
                                 }
                                 _ => token_list[idx - i].priority += 1,
                             },
-                        };
+                    
+                        }
+                    };
+                }
+                Op::Add | Op::Sub => {
+                    for i in 0..idx {
+                        token_list[i].priority += 1;
                     }
                     for i in idx + 1..token_list.len() {
-                        token_list[i].priority += 1;
+                        match &token_list[i].token_info {
+                            TokenInfo::Value(_val) => token_list[i].priority += 1,
+                            TokenInfo::Op(op) => match op {
+                                Op::Add | Op::Sub => {
+                                    break;
+                                }
+                                _ => token_list[i].priority += 1,
+                            },
+                        };
                     }
                 }
             },
@@ -148,10 +161,81 @@ pub fn calculate_priority(token_list: &mut Vec<Token>) {
     }
 }
 
-
-pub fn build_token_list(s: &str) -> Vec<Token>{
-    vec![]
+// input an expression
+// the associated token_list
+pub fn build_token_list(mut s: &str) -> Vec<Token>{
+    let mut token_list :Vec<Token> = vec![];
+    let mut new :&str;
+    while s.len() > 0 {
+        (new, s) = utils::extract_next_token(s);
+        if new.len() == 0 {break;}
+        let n1 = new.chars().next().unwrap();
+        match n1 {
+            '-' => {
+                    match token_list.last() {
+                        None => token_list.push(Token { token_info: TokenInfo::Op(Op::Neg), priority: 0 }),
+                        Some(tok) => match tok.token_info {
+                            TokenInfo::Op(_) => token_list.push(Token { token_info: TokenInfo::Op(Op::Neg), priority: 0 }),  
+                            _ => token_list.push(Token { token_info: TokenInfo::Op(Op::Sub), priority: 0 })
+                        }
+                }
+            }
+            '+' | '*' | '/' => token_list.push(Token { token_info: TokenInfo::Op(Op::new(new)), priority: 0 }),
+            _ => token_list.push(Token { token_info: TokenInfo::Value(Value::Number(Number::new(new))), priority: 0 }) 
+        }
+    };   
+    token_list 
 }
+
+pub fn build_expr_tree(token_list: &[Token])-> Value{
+    // can't have an epmpty list
+    if token_list.len() == 0 {
+        panic!("can't have a empty token_list");
+    }
+    // find the root of the tree
+    let mut min = token_list[0].priority;
+    let mut min_tok = token_list[0].token_info.borrow();
+    let mut min_idx = 0;
+    for idx in 1..token_list.len(){
+        if token_list[idx].priority < min {
+            min_idx = idx;
+            min_tok = token_list[idx].token_info.borrow();
+            min = token_list[idx].priority;
+        };
+    }
+
+
+    // build the tree
+    match min_tok {
+        TokenInfo::Op(op) => match op {
+            Op::Neg => Value::ExpressionUnary(Box::new(ExprUnary{
+                    val : build_expr_tree(&token_list[min_idx+1..]),
+                    op : (*op).clone(),
+                })),
+            _ => Value::ExpressionBinary(Box::new(ExprBinary { 
+                lhs: build_expr_tree(&token_list[..min_idx]), 
+                rhs: build_expr_tree(&token_list[min_idx+1..]), 
+                op : (*op).clone() }))
+            
+            
+        },
+        TokenInfo::Value(val) => (*val).clone()
+            
+    }
+}
+    
+
+pub fn calculate(s:&str)-> i32 {
+    let mut list = build_token_list(s);
+    calculate_priority(&mut list);
+    let expr = build_expr_tree(&list);
+    let res = Value::as_num(expr);
+    res.0
+}
+
+
+
+
 
 
 #[cfg(test)]
@@ -248,23 +332,23 @@ mod tests {
         let mut tokens_prio = vec![];
         tokens_prio.push(Token {
             token_info: TokenInfo::Value(Value::Number(Number(3))),
-            priority: 2,
-        });
-        tokens_prio.push(Token {
-            token_info: TokenInfo::Op(Op::Mul),
-            priority: 1,
-        });
-        tokens_prio.push(Token {
-            token_info: TokenInfo::Op(Op::Neg),
-            priority: 2,
-        });
-        tokens_prio.push(Token {
-            token_info: TokenInfo::Value(Value::Number(Number(5))),
             priority: 3,
         });
         tokens_prio.push(Token {
+            token_info: TokenInfo::Op(Op::Mul),
+            priority: 2,
+        });
+        tokens_prio.push(Token {
+            token_info: TokenInfo::Op(Op::Neg),
+            priority: 3,
+        });
+        tokens_prio.push(Token {
+            token_info: TokenInfo::Value(Value::Number(Number(5))),
+            priority: 4,
+        });
+        tokens_prio.push(Token {
             token_info: TokenInfo::Op(Op::Add),
-            priority: 0,
+            priority: 1,
         });
         tokens_prio.push(Token {
             token_info: TokenInfo::Value(Value::Number(Number(6))),
@@ -272,15 +356,15 @@ mod tests {
         });
         tokens_prio.push(Token {
             token_info: TokenInfo::Op(Op::Add),
-            priority: 1,
+            priority: 0,
         });
         tokens_prio.push(Token {
             token_info: TokenInfo::Op(Op::Neg),
-            priority: 2,
+            priority: 1,
         });
         tokens_prio.push(Token {
             token_info: TokenInfo::Value(Value::Number(Number(3))),
-            priority: 3,
+            priority: 2,
         });
 
         let mut tokens = vec![];
@@ -323,5 +407,65 @@ mod tests {
 
         calculate_priority(&mut tokens);
         assert_eq!(tokens_prio, tokens);
+    }
+
+    #[test]
+    fn token_list_test(){
+        let tok_list = build_token_list("3*-5+6+-3");
+        let mut tokens = vec![];
+        tokens.push(Token {
+            token_info: TokenInfo::Value(Value::Number(Number(3))),
+            priority: 0,
+        });
+        tokens.push(Token {
+            token_info: TokenInfo::Op(Op::Mul),
+            priority: 0,
+        });
+        tokens.push(Token {
+            token_info: TokenInfo::Op(Op::Neg),
+            priority: 0,
+        });
+        tokens.push(Token {
+            token_info: TokenInfo::Value(Value::Number(Number(5))),
+            priority: 0,
+        });
+        tokens.push(Token {
+            token_info: TokenInfo::Op(Op::Add),
+            priority: 0,
+        });
+        tokens.push(Token {
+            token_info: TokenInfo::Value(Value::Number(Number(6))),
+            priority: 0,
+        });
+        tokens.push(Token {
+            token_info: TokenInfo::Op(Op::Add),
+            priority: 0,
+        });
+        tokens.push(Token {
+            token_info: TokenInfo::Op(Op::Neg),
+            priority: 0,
+        });
+        tokens.push(Token {
+            token_info: TokenInfo::Value(Value::Number(Number(3))),
+            priority: 0,
+        });
+        assert_eq!(tok_list,tokens);
+    }
+
+    #[test]
+    fn build_tree_test(){
+        let s = "4*5-6+-2";
+        let mut list = build_token_list(s);
+        calculate_priority(&mut list);
+        let expr = build_expr_tree(&list);
+        let res = Value::as_num(expr);
+        assert_eq!(res, Number(12));
+    }
+
+    #[test]
+    fn calculate_test(){
+        assert_eq!(calculate("3 + 2"), 5);
+        assert_eq!(calculate("-5 * 3 +-2 "), -17);
+        assert_eq!(calculate("- 5 * 8 / 2* -3  + 5   "), -5*8/2*-3+5);
     }
 }

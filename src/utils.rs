@@ -11,12 +11,32 @@ pub(crate) fn extract_digit(s: &str) -> (&str, &str) {
 }
 
 pub(crate) fn extract_operator(s: &str) -> (&str, &str) {
-    extract_while(|c| !c.is_ascii_alphanumeric() && c != ' ', s)
+    match s.chars().next().unwrap() {
+        '+' | '-' | '*' | '/' => (&s[..1], &s[1..]),
+        _ => ("", s)
+    }
 }
 
 pub(crate) fn extract_whitespace(s: &str) -> (&str, &str) {
     extract_while(|c| c == ' ', s)
 }
+
+pub(crate) fn extract_next_token(s : &str) -> (&str, &str){
+    let (_,s) = extract_whitespace(s);
+    if s.len() == 0{
+        return ("","");
+    }
+    let first = s.chars().next().unwrap();
+    if first.is_ascii_digit() {
+        extract_digit(&s)
+    }
+    else if first == '+' || first == '-' || first == '*' || first == '/' {
+        extract_operator(&s)
+    }
+    else {
+        ("","")
+    }
+} 
 
 #[cfg(test)]
 mod tests {
@@ -80,5 +100,24 @@ mod tests {
     #[test]
     fn extract_whitespace_some() {
         assert_eq!(extract_whitespace("  7"), ("  ", "7"));
+    }
+
+    #[test]
+    fn extract_all(){
+        let s = "3+22 *-5";
+        let (test,s) = extract_next_token(s);
+        assert_eq!( test, "3");
+        let (test,s) = extract_next_token(s);
+        assert_eq!( test, "+");
+        let (test,s) = extract_next_token(s);
+        assert_eq!( test, "22");
+        let (test,s) = extract_next_token(s);
+        assert_eq!( test, "*");
+        let (test,s) = extract_next_token(s);
+        assert_eq!( test, "-");
+        let (test,s) = extract_next_token(s);
+        assert_eq!( test, "5");
+        let (test,_) = extract_next_token(s);
+        assert_eq!( test, "");
     }
 }

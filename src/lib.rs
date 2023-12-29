@@ -15,6 +15,7 @@ pub enum Op {
     Sub,
     Mul,
     Div,
+    Neg
 }
 
 impl Op {
@@ -56,8 +57,8 @@ pub struct ExprUnary {
 impl ExprUnary {
     pub fn evaluate(expr: Self) -> Number {
         match expr.op {
-            Op::Sub => Number(-Value::as_num(expr.val).0),
-            _ => panic!("not a valid unary")
+            Op::Neg => Number(-Value::as_num(expr.val).0),
+            _ => unreachable!()
         }
     }
 }
@@ -96,6 +97,7 @@ impl ExprBinary {
             Op::Sub => Number(lh - rh),
             Op::Mul => Number(lh * rh),
             Op::Div => Number(lh / rh),
+            _ => unreachable!()
         }
     }
 }
@@ -113,12 +115,14 @@ pub struct Token {
 }
 
 // calculate the priority value of the token in token_list
+// lower priority are closer to the root of the tree representing the operation
 // they are supposed to be at 0
 pub fn calculate_priority(token_list: &mut Vec<Token>) {
     for idx in 0..token_list.len() {
         match &token_list[idx].token_info {
             TokenInfo::Value(_val) => (),
             TokenInfo::Op(op) => match op {
+                Op::Neg => token_list[idx + 1].priority = token_list[idx].priority + 1,
                 Op::Mul | Op::Div => {
                     token_list[idx - 1].priority += 1;
                     token_list[idx + 1].priority += 1;
@@ -128,10 +132,10 @@ pub fn calculate_priority(token_list: &mut Vec<Token>) {
                         match &token_list[idx - i].token_info {
                             TokenInfo::Value(_val) => token_list[idx - i].priority += 1,
                             TokenInfo::Op(op) => match op {
-                                Op::Mul | Op::Div => token_list[idx - i].priority += 1,
                                 Op::Add | Op::Sub => {
                                     break;
                                 }
+                                _ => token_list[idx - i].priority += 1,
                             },
                         };
                     }
@@ -143,6 +147,12 @@ pub fn calculate_priority(token_list: &mut Vec<Token>) {
         };
     }
 }
+
+
+pub fn build_token_list(s: &str) -> Vec<Token>{
+    vec![]
+}
+
 
 #[cfg(test)]
 mod tests {
@@ -228,7 +238,7 @@ mod tests {
     fn evaluate_unary(){
         let expr = ExprUnary {
             val : Value::Number(Number(3)),
-            op: Op::Sub
+            op: Op::Neg
         };
         assert_eq!(Number(-3), ExprUnary::evaluate(expr))
     }
@@ -245,8 +255,12 @@ mod tests {
             priority: 1,
         });
         tokens_prio.push(Token {
-            token_info: TokenInfo::Value(Value::Number(Number(5))),
+            token_info: TokenInfo::Op(Op::Neg),
             priority: 2,
+        });
+        tokens_prio.push(Token {
+            token_info: TokenInfo::Value(Value::Number(Number(5))),
+            priority: 3,
         });
         tokens_prio.push(Token {
             token_info: TokenInfo::Op(Op::Add),
@@ -261,7 +275,7 @@ mod tests {
             priority: 1,
         });
         tokens_prio.push(Token {
-            token_info: TokenInfo::Op(Op::Sub),
+            token_info: TokenInfo::Op(Op::Neg),
             priority: 2,
         });
         tokens_prio.push(Token {
@@ -279,6 +293,10 @@ mod tests {
             priority: 0,
         });
         tokens.push(Token {
+            token_info: TokenInfo::Op(Op::Neg),
+            priority: 0,
+        });
+        tokens.push(Token {
             token_info: TokenInfo::Value(Value::Number(Number(5))),
             priority: 0,
         });
@@ -295,7 +313,7 @@ mod tests {
             priority: 0,
         });
         tokens.push(Token {
-            token_info: TokenInfo::Op(Op::Sub),
+            token_info: TokenInfo::Op(Op::Neg),
             priority: 0,
         });
         tokens.push(Token {

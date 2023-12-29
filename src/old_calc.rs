@@ -1,6 +1,6 @@
 use std::borrow::Borrow;
 
-mod utils;
+#[path ="utils.rs"] mod utils;
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Number(pub i32);
